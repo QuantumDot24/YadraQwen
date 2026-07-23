@@ -1,147 +1,484 @@
 # 🚀 Yadra Qwen3 Vulkan Inference Engine
 
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Windows%20%7C%20Linux-brightgreen)](#)
-[![GPU](https://img.shields.io/badge/GPU-Vulkan%20Compute%20(Mali%20G615%20MC6)-blue)](#)
-[![Model](https://img.shields.io/badge/Model-Qwen%203%200.6B-orange)](#)
-[![Quantization](https://img.shields.io/badge/Quantization-Q4__K%20%2F%20Q6__K-purple)](#)
-
-A high-performance, Vulkan-accelerated inference engine for **Qwen 3 (0.6B)** optimized for mobile and desktop environments. Designed to run completely on the GPU of a **Mali G615 MC6** (and compatible Vulkan GPUs) using custom compute shaders and quantized GGUF weights.
+> **A high-performance Vulkan inference engine for Qwen3 on Android and Desktop.**
+>
+> Designed from the ground up to execute **entirely on the GPU**, using custom Vulkan compute shaders and quantized GGUF models, with zero CPU participation during inference.
 
 ---
 
-## ✨ Key Features
+## ✨ Highlights
 
-* **Zero-CPU Vulkan Backend** — Entire inference pipeline runs as custom GPU compute shaders with zero CPU intervention during generation.
-* **Native Qwen 3 (0.6B) Support** — Direct execution of GGUF models with RMSNorm, RoPE, GQA, SiLU-gated FFN, and Q4_K / Q6_K quantization.
-* **On-Device KV Cache** — Sliding window cache pre-allocated on GPU for efficient autoregressive decoding.
-* **Graph Capture Optimization** — Captures a Vulkan compute graph on the first decode step, reusing it for all subsequent tokens to eliminate driver overhead.
-* **GPU-Side Sampling** — Argmax (greedy) and Temperature + Top-P sampling executed directly on the GPU.
-* **BPE Tokenizer** — Native C++ tokenizer (`tokenizer3.json` compatible) with byte-level fallback and special token handling.
-* **Streaming & Metrics** — Real-time token streaming via callbacks and detailed latency profiling via `GenerationStats`.
+- ⚡ **100% GPU Inference**
+  - Every transformer operation runs as Vulkan compute shaders.
+  - No CPU math during generation.
 
----
+- 🧠 **Native Qwen3 Support**
+  - GGUF model loading
+  - Q4_K / Q6_K quantization
+  - RMSNorm
+  - Rotary Positional Embeddings (RoPE)
+  - Grouped Query Attention (GQA)
+  - SiLU-gated Feed Forward Network
 
-## 🏗️ Architecture Overview
+- 📦 **GPU KV Cache**
+  - Fully GPU-resident sliding-window KV cache.
+  - Optimized for autoregressive decoding.
 
-The core engine is structured into modular high-performance components:
+- 🔥 **Vulkan Graph Capture**
+  - Records the decode pipeline once.
+  - Compiles it into a reusable Vulkan graph.
+  - Eliminates per-token command buffer overhead.
 
-| Component | Description |
-| :--- | :--- |
-| **`Qwen3Config`** | Parses model architecture hyperparameters directly from GGUF metadata. |
-| **`Qwen3BPETokenizer`** | Fast C++ BPE tokenizer with support for special tokens (`<think>`, `<|im_start|>`). |
-| **`KVCache`** | Pre-allocated per-layer key/value tensor manager for maximum sequence length. |
-| **`Qwen3Engine`** | Pipeline orchestrator handling initialization, prefill, and the decode loop. |
-| **`Tensor` / Vulkan Executor** | Low-level Vulkan runtime providing custom compute dispatches and graph capture. |
+- 🎲 **GPU Sampling**
+  - Greedy (Argmax)
+  - Temperature sampling
+  - Top-P
+  - Top-K
 
----
+- 🔤 **BPE Tokenizer**
+  - Compatible with `tokenizer3.json`
+  - Byte fallback
+  - Merge rules
+  - Special tokens
 
-## 🔄 Inference Pipeline
+- 📡 **Streaming Generation**
+  - Token callback interface.
+  - Low-latency streaming responses.
 
-![Inference Pipeline](docs/pipeline.svg)
-
-### Execution Steps
-1.  **Model Loading:** GGUF weights uploaded directly to GPU-visible memory buffers as quantized matrices.
-2.  **Tokenization:** Text converted into token IDs using standard Qwen special token rules.
-3.  **Prefill Stage:** Input prompt processed in a single batched `forward()` pass.
-4.  **Decode Loop:** Subsequent tokens generated iteratively using Vulkan Graph Capture for ultra-low latency.
-5.  **Streaming:** Tokens streamed to host memory via persistent mapped GPU buffers.
-
----
-
-## 🛠️ Vulkan Engine Highlights
-
-* **Custom Shader Dispatches:** Hand-written GLSL shaders for key kernels (`matmul_q4k`, `rmsnorm`, `rope`, `fused_silu_mul`, `sample_temperature`).
-* **Vulkan Graph Capture:** Replaces individual command submissions with pre-recorded command buffers:
-    ```cpp
-    Tensor::executor().begin_graph();
-    // ... record inference pipeline ...
-    Tensor::executor().stop_capture();
-    graph->compile();
-    graph->execute(); // Executed on every decode token
-    ```
-* **Persistent Memory Mapping:** Zero-copy token output retrieval using `map_persistent()` buffers.
+- 📊 **Performance Metrics**
+  - Prefill timing
+  - Decode timing
+  - Tokens/sec statistics
 
 ---
 
-## 💻 Quick Start & Usage
+# Architecture
 
-### Interactive CLI Chat
+The engine is divided into a small number of core components.
 
-Run the interactive shell on Windows, Linux, or via Android ADB:
+| Component | Responsibility |
+|------------|----------------|
+| `Qwen3Config` | Reads model metadata from GGUF |
+| `Qwen3BPETokenizer` | BPE encoding and decoding |
+| `KVCache` | GPU-resident key/value cache |
+| `Qwen3Engine` | Complete inference pipeline |
+| `Tensor / Vulkan Executor` | Vulkan runtime, tensor operations and graph execution |
+
+---
+
+# Inference Pipeline
+
+```
+Prompt
+   │
+   ▼
+Tokenizer (CPU)
+   │
+   ▼
+Token IDs
+   │
+   ▼
+Embedding Lookup (GPU)
+   │
+   ▼
+Transformer Layers × N
+   │
+   ├── Attention
+   │      ├── RMSNorm
+   │      ├── RoPE
+   │      ├── KV Cache
+   │      └── Output Projection
+   │
+   └── Feed Forward
+          ├── Gate Projection
+          ├── Up Projection
+          ├── SiLU
+          └── Down Projection
+   │
+   ▼
+Final RMSNorm
+   │
+   ▼
+LM Head
+   │
+   ▼
+Logits
+   │
+   ▼
+GPU Sampling
+   │
+   ▼
+Next Token
+   │
+   └───────────────┐
+                   │
+                   ▼
+             Decode Loop
+```
+
+---
+
+## Generation Flow
+
+### 1. Model Loading
+
+The GGUF file is parsed and every tensor is uploaded to GPU-visible memory while preserving its original quantization.
+
+Supported formats:
+
+- Q4_K
+- Q6_K
+
+---
+
+### 2. Tokenization
+
+The prompt is encoded using a BPE tokenizer compatible with Qwen3.
+
+Supported features include:
+
+- merge rules
+- byte fallback
+- special tokens
+
+Examples:
+
+```
+<|im_start|>
+<|im_end|>
+<think>
+```
+
+---
+
+### 3. Prefill
+
+The entire prompt is processed in one forward pass.
+
+Pipeline:
+
+```
+Tokens
+   ↓
+Embedding
+   ↓
+Transformer Layers
+   ↓
+Final RMSNorm
+   ↓
+LM Head
+   ↓
+Logits
+```
+
+During this phase the KV Cache is populated.
+
+---
+
+### 4. Decode
+
+Generation proceeds one token at a time.
+
+The **first decode step** performs:
+
+- Vulkan graph capture
+- graph compilation
+- pipeline optimization
+
+Every following token simply executes the compiled graph.
+
+This dramatically reduces Vulkan driver overhead, particularly on Mali GPUs.
+
+---
+
+### 5. GPU Sampling
+
+Sampling occurs entirely on the GPU.
+
+Available methods:
+
+- Greedy
+- Temperature
+- Top-P
+- Top-K
+
+The selected token ID is written directly into a persistently mapped buffer.
+
+---
+
+### 6. Streaming
+
+Each generated token is immediately returned through a callback.
+
+```cpp
+[](int32_t token)
+{
+    // Handle generated token
+}
+```
+
+---
+
+# Vulkan Backend
+
+The engine is built on top of the custom **Yadra Vulkan Runtime**.
+
+## Custom Compute Shaders
+
+Specialized GLSL kernels include:
+
+- MatMul Q4_K
+- MatMul Q6_K
+- RMSNorm
+- RoPE
+- Flash Attention
+- SiLU
+- Sampling
+
+---
+
+## Vulkan Graph Capture
+
+```cpp
+Tensor::executor().begin_graph();
+
+// record operations
+
+Tensor::executor().stop_capture();
+
+graph->compile();
+
+graph->execute();
+```
+
+Instead of recording hundreds of dispatches every token, the runtime executes a single precompiled graph.
+
+---
+
+## Persistent Mapped Buffers
+
+Sampling results are read through persistently mapped buffers:
+
+```cpp
+result_buffer->map_persistent();
+```
+
+This avoids repeated GPU → CPU synchronization.
+
+---
+
+# Usage
+
+## Desktop
 
 ```bash
 ./qwen3_chat [model.gguf] [tokenizer3.json] [max_seq_len]
-#### Example Terminal Session
-```text
-╔══════════════════════════════════════════╗
-║   Qwen3-0.6B Chat — Vulkan / YadraCore   ║
-║   Type 'exit' or 'quit' to exit          ║
-╚══════════════════════════════════════════╝
+```
 
-You: What is the capital of France?
-Assistant: The capital of France is Paris.
+Arguments:
 
-You: /think
-[Think mode: ON]
+| Argument | Description |
+|-----------|-------------|
+| model.gguf | GGUF model |
+| tokenizer3.json | tokenizer configuration |
+| max_seq_len | maximum sequence length |
 
-You: Solve 2+2
-Assistant: <think>
-2+2=4
+---
+
+## Interactive Chat
+
+Example:
+
+```
+╔════════════════════════════════════════╗
+║      Qwen3 Vulkan Chat (Yadra)         ║
+╚════════════════════════════════════════╝
+
+You:
+```
+
+Commands:
+
+```
+/think
+```
+
+Toggle reasoning mode.
+
+```
+exit
+```
+
+Exit application.
+
+---
+
+# Example
+
+```
+You:
+What is the capital of France?
+
+Assistant:
+Paris.
+
+You:
+/think
+
+You:
+Solve 2+2
+
+Assistant:
+<think>
+
+2 + 2 = 4
+
 </think>
+
 The answer is 4.
-Note: Use /think to toggle reasoning mode (<think> tags).
+```
 
-🔌 C++ Integration
-Easily embed the engine in your own native C++ or Android JNI application:
+---
 
-C++
+# Integration
+
+```cpp
 #include "yadra/qwen3/qwen3_engine.hpp"
 
-int main() {
+int main()
+{
     yadra::Qwen3Engine engine;
-    
-    // Initialize engine
-    engine.load("qwen3-0.6b.Q4_K_M.gguf", "tokenizer3.json", 2048);
 
-    // High-level blocking chat
-    std::string response = engine.chat("Why is the sky blue?", 256, 0.7f, false);
+    engine.load(
+        "qwen3-0.6b.Q4_K_M.gguf",
+        "tokenizer3.json",
+        2048
+    );
 
-    // Low-level token streaming callback
-    auto tokens = engine.generate(prompt_ids, 256, 0.7f, 0.9f, [](int32_t token) {
-        // Process token in real-time
-    });
+    std::string response =
+        engine.chat(
+            "Why is the sky blue?",
+            256,
+            0.7f,
+            false
+        );
 
-    // Inspect latency metrics
+    auto tokens =
+        engine.generate(
+            prompt_ids,
+            256,
+            0.7f,
+            0.9f,
+            [](int32_t token)
+            {
+                // Streaming callback
+            });
+
     auto stats = engine.last_stats();
-    printf("Prefill: %.1f ms | Decode: %.1f ms\n", stats.prefill_ms, stats.decode_ms);
 
-    return 0;
+    printf("Prefill : %.2f ms\n", stats.prefill_ms);
+    printf("Decode  : %.2f ms\n", stats.decode_ms);
 }
-🔨 Building from Source
-Prerequisites
-C++ Compiler: C++17 support
+```
 
-CMake: 3.18 or higher
+The exact same engine is used on Android through a JNI wrapper.
 
-Vulkan SDK: Headers & Validation Layers
+---
 
-Android Development (Optional): NDK r25+ (for arm64-v8a builds)
+# Build
 
-Desktop Build (Windows / Linux)
-Bash
+## Requirements
+
+- C++17
+- CMake ≥ 3.18
+- Android NDK r25+
+- Vulkan SDK
+
+Dependencies:
+
+- nlohmann/json
+- Yadra Vulkan Runtime
+
+---
+
+## Desktop
+
+```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-Android Cross-Compilation
-Bash
-cmake -B build-android \
-  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=arm64-v8a \
-  -DANDROID_PLATFORM=android-26 \
-  -DCMAKE_BUILD_TYPE=Release
 
-cmake --build build-android
-🤝 Contributing
-We welcome contributions! Please open an issue to discuss major changes. This engine was originally developed for PC and then ported to Android / Mali GPUs. The core inference logic is identical; only the Vulkan backend’s shader compilation and workgroup tuning are platform-specific.
+cmake --build build
+```
 
-📄 License
-Specify your open-source license here (e.g., MIT, Apache 2.0).
+---
+
+## Android
+
+```bash
+cmake \
+    -B build \
+    -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+    -DANDROID_ABI=arm64-v8a
+
+cmake --build build
+```
+
+---
+
+# Performance Goals
+
+Designed specifically for modern mobile GPUs.
+
+Current optimization targets include:
+
+- Mali G615 MC6
+- Vulkan 1.3
+- Graph Capture
+- Quantized Matrix Multiplication
+- Flash Attention
+- GPU Sampling
+- Zero CPU Inference
+
+---
+
+# Roadmap
+
+- [x] GGUF loading
+- [x] Q4_K inference
+- [x] Q6_K inference
+- [x] Vulkan graph capture
+- [x] GPU sampling
+- [x] Streaming generation
+- [x] Android support
+- [ ] Flash Attention v2
+- [ ] Speculative decoding
+- [ ] Multi-batch inference
+- [ ] Multi-GPU execution
+- [ ] Additional GGUF quantization formats
+
+---
+
+# Contributing
+
+Contributions are welcome.
+
+Please open an issue before making major architectural changes.
+
+---
+
+# License
+
+Specify your preferred open-source license.
+
+Examples:
+
+- MIT
+- Apache 2.0
+- BSD-3-Clause
+
+---
+
+## About
+
+**Yadra Qwen3 Vulkan Inference Engine** is a research-focused inference engine designed to explore how far modern mobile GPUs can be pushed for large language model inference.
+
+Originally developed for desktop GPUs and later optimized for Android, the engine shares the same inference core across all supported platforms, while only the Vulkan backend is tuned for each GPU architecture.
