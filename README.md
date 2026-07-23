@@ -57,7 +57,7 @@
 The engine is organized into a small number of core components that together implement the complete Qwen3 inference pipeline.
 
 <p align="center">
-  <img src="docs/architecture.svg" alt="Yadra Qwen3 Vulkan Architecture" width="900">
+  <img src="architecture.svg" alt="Yadra Qwen3 Vulkan Architecture" width="900">
 </p>
 
 | Component | Responsibility |
