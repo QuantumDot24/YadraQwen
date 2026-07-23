@@ -71,3 +71,77 @@ Run the interactive shell on Windows, Linux, or via Android ADB:
 
 ```bash
 ./qwen3_chat [model.gguf] [tokenizer3.json] [max_seq_len]
+#### Example Terminal Session
+```text
+╔══════════════════════════════════════════╗
+║   Qwen3-0.6B Chat — Vulkan / YadraCore   ║
+║   Type 'exit' or 'quit' to exit          ║
+╚══════════════════════════════════════════╝
+
+You: What is the capital of France?
+Assistant: The capital of France is Paris.
+
+You: /think
+[Think mode: ON]
+
+You: Solve 2+2
+Assistant: <think>
+2+2=4
+</think>
+The answer is 4.
+Note: Use /think to toggle reasoning mode (<think> tags).
+
+🔌 C++ Integration
+Easily embed the engine in your own native C++ or Android JNI application:
+
+C++
+#include "yadra/qwen3/qwen3_engine.hpp"
+
+int main() {
+    yadra::Qwen3Engine engine;
+    
+    // Initialize engine
+    engine.load("qwen3-0.6b.Q4_K_M.gguf", "tokenizer3.json", 2048);
+
+    // High-level blocking chat
+    std::string response = engine.chat("Why is the sky blue?", 256, 0.7f, false);
+
+    // Low-level token streaming callback
+    auto tokens = engine.generate(prompt_ids, 256, 0.7f, 0.9f, [](int32_t token) {
+        // Process token in real-time
+    });
+
+    // Inspect latency metrics
+    auto stats = engine.last_stats();
+    printf("Prefill: %.1f ms | Decode: %.1f ms\n", stats.prefill_ms, stats.decode_ms);
+
+    return 0;
+}
+🔨 Building from Source
+Prerequisites
+C++ Compiler: C++17 support
+
+CMake: 3.18 or higher
+
+Vulkan SDK: Headers & Validation Layers
+
+Android Development (Optional): NDK r25+ (for arm64-v8a builds)
+
+Desktop Build (Windows / Linux)
+Bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+Android Cross-Compilation
+Bash
+cmake -B build-android \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-26 \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build-android
+🤝 Contributing
+We welcome contributions! Please open an issue to discuss major changes. This engine was originally developed for PC and then ported to Android / Mali GPUs. The core inference logic is identical; only the Vulkan backend’s shader compilation and workgroup tuning are platform-specific.
+
+📄 License
+Specify your open-source license here (e.g., MIT, Apache 2.0).
