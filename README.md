@@ -1,5 +1,10 @@
 # 🚀 Yadra Qwen3 Vulkan Inference Engine
-
+![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)
+![Vulkan](https://img.shields.io/badge/Vulkan-1.3-red.svg)
+![Android](https://img.shields.io/badge/Android-arm64-brightgreen.svg)
+![Linux](https://img.shields.io/badge/Linux-supported-success.svg)
+![Windows](https://img.shields.io/badge/Windows-supported-success.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 > **A high-performance Vulkan inference engine for Qwen3 on Android and Desktop.**
 >
 > Designed from the ground up to execute **entirely on the GPU**, using custom Vulkan compute shaders and quantized GGUF models, with zero CPU participation during inference.
